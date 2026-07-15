@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omnivex — Session</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .font-display { font-family: 'Fraunces', serif; }
+  .font-body { font-family: 'IBM Plex Sans', sans-serif; }
+  .font-mono-ibm { font-family: 'IBM Plex Mono', monospace; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #332E28; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #45403A; }
+
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] .chev { transform: rotate(90deg); }
+
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .status-pulsing { animation: pulse-dot 1.1s ease-in-out infinite; }
+
+  .status-idle { background: #45403A; }
+  .status-loading { background: #E3A63C; }
+  .status-ready { background: #5E9C6E; }
+  .status-error { background: #C1443A; }
+body { background: #0C0B0A; }
+</style>
+</head>
+<body class="bg-[#0C0B0A] text-[#F3EFE7] font-body antialiased h-screen overflow-hidden flex flex-col">
+
+<!-- Header -->
+<header class="shrink-0 border-b border-[#221F1B]">
+  <div class="max-w-[1400px] mx-auto flex items-center justify-between px-8 py-4">
+    <a href="index.html" class="font-display text-[20px] font-semibold tracking-tight">
+      <span class="text-[#E3A63C]">Omni</span><span class="text-[#C1443A]">vex</span>
+    </a>
+    <div class="flex items-center gap-4">
+      <div id="session-chip" class="font-mono-ibm text-xs text-[#6E645A] border border-[#332E28] rounded-full px-3 py-1.5">0 / 3 sources ready</div>
+      <button class="text-sm font-medium border border-[#332E28] rounded-md px-4 py-2 hover:border-[#E3A63C] hover:bg-[#E3A63C]/[0.14] transition-colors">New session</button>
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="flex-1 min-h-0 max-w-[1400px] w-full mx-auto grid grid-cols-[340px_1fr] md:grid-cols-1 md:min-h-0">
+
+  <!-- Sources panel -->
+  <aside class="border-r border-[#221F1B] md:border-r-0 md:border-b flex flex-col min-h-0 overflow-y-auto">
+    <div class="p-8 pb-6">
+      <h1 class="font-display text-[22px] font-semibold mb-2">Your sources</h1>
+      <p class="text-sm text-[#A89C8C] leading-relaxed">Add up to three links, then ingest. Each source is read with its own strategy.</p>
+    </div>
+
+    <div class="px-8 flex flex-col gap-5">
+
+      <!-- Article -->
+      <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] p-5" data-source="article">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-9 h-9 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-xs font-semibold bg-[#E3A63C]/[0.14] text-[#E3A63C]">A</div>
+          <div class="min-w-0">
+            <div class="font-mono-ibm text-[11px] tracking-[0.1em] uppercase text-[#6E645A]">Article / Wiki</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="status-dot w-[7px] h-[7px] rounded-full status-idle shrink-0"></span>
+              <span class="status-label text-xs text-[#A89C8C]">Idle</span>
+            </div>
+          </div>
+        </div>
+        <input type="url" placeholder="Paste an article or Wikipedia link…"
+          class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
+      </div>
+
+      <!-- Discussion -->
+      <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] p-5" data-source="discussion">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-9 h-9 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-xs font-semibold bg-[#C1443A]/[0.14] text-[#C1443A]">T</div>
+          <div class="min-w-0">
+            <div class="font-mono-ibm text-[11px] tracking-[0.1em] uppercase text-[#6E645A]">Discussion Thread</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="status-dot w-[7px] h-[7px] rounded-full status-idle shrink-0"></span>
+              <span class="status-label text-xs text-[#A89C8C]">Idle</span>
+            </div>
+          </div>
+        </div>
+        <input type="url" placeholder="Paste a Hacker News or Stack Exchange link…"
+          class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
+      </div>
+
+      <!-- Video -->
+      <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] p-5" data-source="video">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-9 h-9 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-xs font-semibold bg-[#A89C8C]/[0.14] text-[#A89C8C]">V</div>
+          <div class="min-w-0">
+            <div class="font-mono-ibm text-[11px] tracking-[0.1em] uppercase text-[#6E645A]">Video Transcript</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span class="status-dot w-[7px] h-[7px] rounded-full status-idle shrink-0"></span>
+              <span class="status-label text-xs text-[#A89C8C]">Idle</span>
+            </div>
+          </div>
+        </div>
+        <input type="url" placeholder="Paste a YouTube link…"
+          class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
+      </div>
+
+    </div>
+
+    <div class="p-8 mt-auto">
+      <button id="ingest-btn" class="w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all disabled:opacity-40 disabled:pointer-events-none">
+        Ingest Sources
+      </button>
+      <p class="font-mono-ibm text-[11px] text-[#6E645A] mt-4 leading-relaxed">Sources are chunked, embedded locally, and stored for this session — nothing leaves until you ask a question.</p>
+    </div>
+  </aside>
+
+  <!-- Chat panel -->
+  <section class="flex flex-col min-h-0">
+
+    <div id="chat-scroll" class="flex-1 min-h-0 overflow-y-auto">
+      <div class="max-w-[760px] mx-auto px-6 py-12 flex flex-col gap-10 min-h-full">
+
+      <!-- Empty state -->
+      <div id="empty-state" class="m-auto text-center max-w-[42ch]">
+        <div class="font-mono-ibm text-xs tracking-[0.14em] uppercase text-[#E3A63C] mb-3">Ready when you are</div>
+        <h2 class="font-display text-[26px] font-semibold mb-3">Ingest your sources to start asking questions.</h2>
+        <p class="text-[15px] text-[#A89C8C] leading-relaxed">Once your links are ready, ask anything — Omnivex will retrieve, verify, and cite before it answers.</p>
+      </div>
+
+      <!-- User message (demo) -->
+      <div class="hidden msg-user flex justify-end">
+        <div class="max-w-[85%] bg-[#1B1817] border border-[#2A2622] rounded-[14px] rounded-tr-sm px-5 py-3.5 text-[15px]">
+          What happens if they lose the lawsuit?
+        </div>
+      </div>
+
+      <!-- Assistant message (demo) -->
+      <div class="hidden msg-assistant">
+        <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] rounded-tl-sm px-7 py-6">
+
+          <p class="text-[15px] leading-[1.75] text-[#F3EFE7] mb-5">
+            If the company loses, the discussion points to two concrete consequences: a court-ordered fine in the low hundreds of millions, and a mandated change to how the disputed feature is licensed going forward. The video transcript adds that an appeal would likely follow, extending the timeline by twelve to eighteen months rather than resolving it outright.
+          </p>
+
+          <!-- Citations -->
+          <div class="flex gap-2 flex-wrap mb-5">
+            <button class="font-mono-ibm text-xs text-[#A89C8C] border border-[#332E28] hover:border-[#E3A63C] hover:text-[#E3A63C] px-3 py-1.5 rounded-full transition-colors">▶ 14:22 — video</button>
+            <button class="font-mono-ibm text-xs text-[#A89C8C] border border-[#332E28] hover:border-[#E3A63C] hover:text-[#E3A63C] px-3 py-1.5 rounded-full transition-colors">✦ comment by jrn88</button>
+            <button class="font-mono-ibm text-xs text-[#A89C8C] border border-[#332E28] hover:border-[#E3A63C] hover:text-[#E3A63C] px-3 py-1.5 rounded-full transition-colors">▤ ¶4 — article</button>
+          </div>
+
+          <!-- Grounding confidence -->
+          <div class="mb-5">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-mono-ibm text-[11px] tracking-[0.08em] uppercase text-[#6E645A]">Grounding confidence</span>
+              <span class="font-mono-ibm text-[11px] text-[#E3A63C]">91%</span>
+            </div>
+            <div class="h-1.5 rounded-full bg-[#2A2622] overflow-hidden">
+              <div class="h-full rounded-full bg-gradient-to-r from-[#E3A63C] to-[#C1443A]" style="width: 91%"></div>
+            </div>
+          </div>
+
+          <!-- Healing log -->
+          <details class="border-t border-[#2A2622] pt-4">
+            <summary class="flex items-center gap-2 text-xs text-[#A89C8C] hover:text-[#F3EFE7] transition-colors">
+              <svg class="chev w-3 h-3 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+              <span>↻ Healing log — 1 retry, stronger evidence found</span>
+            </summary>
+            <div class="mt-4 flex flex-col gap-3 pl-5 border-l border-[#2A2622]">
+              <div class="text-xs text-[#A89C8C] leading-relaxed">
+                <span class="text-[#C1443A] font-semibold">Attempt 1 — WEAK.</span> Retrieved chunks were tangential to the original phrasing; grader flagged low support.
+              </div>
+              <div class="text-xs text-[#A89C8C] leading-relaxed">
+                <span class="text-[#E3A63C] font-semibold">Rewrote query</span> to "potential legal or financial consequences of losing the lawsuit" and expanded retrieval to the video transcript.
+              </div>
+              <div class="text-xs text-[#A89C8C] leading-relaxed">
+                <span class="text-[#5E9C6E] font-semibold">Attempt 2 — SUPPORTED.</span> Strong match found in the transcript and one discussion comment.
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </div>
+
+      </div>
+    </div>
+
+    <!-- Composer -->
+    <div class="shrink-0 border-t border-[#221F1B] p-6">
+      <div class="max-w-[760px] mx-auto flex items-end gap-3 bg-[#1B1817] border border-[#2A2622] rounded-[14px] px-4 py-3.5 focus-within:border-[#E3A63C] transition-colors">
+        <textarea id="chat-input" rows="1" placeholder="Ask something about your sources…"
+          class="flex-1 bg-transparent resize-none text-sm placeholder:text-[#6E645A] focus:outline-none py-1 max-h-32"></textarea>
+        <button id="send-btn" class="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] flex items-center justify-center hover:-translate-y-0.5 transition-transform disabled:opacity-30 disabled:pointer-events-none" disabled>
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <p id="composer-hint" class="font-mono-ibm text-[11px] text-[#6E645A] mt-3 text-center">Ingest at least one source to start asking questions.</p>
+    </div>
+
+  </section>
+</main>
+
+<script>
+  const sourceCards = document.querySelectorAll('[data-source]');
+  const ingestBtn = document.getElementById('ingest-btn');
+  const sessionChip = document.getElementById('session-chip');
+  const chatInput = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('send-btn');
+  const composerHint = document.getElementById('composer-hint');
+  const emptyState = document.getElementById('empty-state');
+  const chatScroll = document.getElementById('chat-scroll');
+  const userMsg = document.querySelector('.msg-user');
+  const assistantMsg = document.querySelector('.msg-assistant');
+
+  function setStatus(card, state, label) {
+    const dot = card.querySelector('.status-dot');
+    const text = card.querySelector('.status-label');
+    dot.className = 'status-dot w-[7px] h-[7px] rounded-full shrink-0 status-' + state + (state === 'loading' ? ' status-pulsing' : '');
+    text.textContent = label;
+  }
+
+  function readyCount() {
+    return document.querySelectorAll('.status-ready').length;
+  }
+
+  function refreshChip() {
+    sessionChip.textContent = readyCount() + ' / 3 sources ready';
+  }
+
+  ingestBtn.addEventListener('click', () => {
+    const filled = Array.from(sourceCards).filter(c => c.querySelector('input').value.trim().length > 0);
+    const targets = filled.length ? filled : Array.from(sourceCards);
+
+    ingestBtn.disabled = true;
+    ingestBtn.textContent = 'Ingesting…';
+
+    targets.forEach(card => setStatus(card, 'loading', 'Ingesting…'));
+
+    setTimeout(() => {
+      targets.forEach(card => setStatus(card, 'ready', 'Ready'));
+      refreshChip();
+      ingestBtn.disabled = false;
+      ingestBtn.textContent = 'Ingest Sources';
+
+      if (readyCount() > 0) {
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+        composerHint.textContent = 'Answers are grounded only in what you\u2019ve ingested — with citations for every claim.';
+      }
+    }, 1400);
+  });
+
+  chatInput.addEventListener('input', () => {
+    sendBtn.disabled = chatInput.value.trim().length === 0 && readyCount() === 0;
+  });
+
+  function sendMessage() {
+    if (chatInput.value.trim().length === 0) return;
+    emptyState.classList.add('hidden');
+    userMsg.classList.remove('hidden');
+    userMsg.querySelector('div').textContent = chatInput.value.trim();
+    chatInput.value = '';
+    setTimeout(() => {
+      assistantMsg.classList.remove('hidden');
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+    }, 500);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
+
+</body>
+</html>
