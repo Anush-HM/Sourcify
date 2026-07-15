@@ -28,7 +28,9 @@
   .status-loading { background: #E3A63C; }
   .status-ready { background: #5E9C6E; }
   .status-error { background: #C1443A; }
-body { background: #0C0B0A; }
+
+  @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fade-in .45s ease-out; }
 </style>
 </head>
 <body class="bg-[#0C0B0A] text-[#F3EFE7] font-body antialiased h-screen overflow-hidden flex flex-col">
@@ -40,23 +42,25 @@ body { background: #0C0B0A; }
       <span class="text-[#E3A63C]">Omni</span><span class="text-[#C1443A]">vex</span>
     </a>
     <div class="flex items-center gap-4">
-      <div id="session-chip" class="font-mono-ibm text-xs text-[#6E645A] border border-[#332E28] rounded-full px-3 py-1.5">0 / 3 sources ready</div>
-      <button class="text-sm font-medium border border-[#332E28] rounded-md px-4 py-2 hover:border-[#E3A63C] hover:bg-[#E3A63C]/[0.14] transition-colors">New session</button>
+      <div id="session-chip" class="hidden font-mono-ibm text-xs text-[#6E645A] border border-[#332E28] rounded-full px-3 py-1.5">0 / 3 sources ready</div>
+      <div class="w-8 h-8 rounded-full bg-[#1B1817] border border-[#332E28] flex items-center justify-center font-mono-ibm text-xs text-[#A89C8C]">A</div>
     </div>
   </div>
 </header>
 
-<!-- Main -->
-<main class="flex-1 min-h-0 max-w-[1400px] w-full mx-auto grid grid-cols-[340px_1fr] md:grid-cols-1 md:min-h-0">
+<!-- ============================= -->
+<!-- STAGE 1 — Sources only        -->
+<!-- ============================= -->
+<main id="stage-sources" class="flex-1 min-h-0 overflow-y-auto flex items-center justify-center px-6 py-12">
+  <div class="w-full max-w-[640px]">
 
-  <!-- Sources panel -->
-  <aside class="border-r border-[#221F1B] md:border-r-0 md:border-b flex flex-col min-h-0 overflow-y-auto">
-    <div class="p-8 pb-6">
-      <h1 class="font-display text-[22px] font-semibold mb-2">Your sources</h1>
-      <p class="text-sm text-[#A89C8C] leading-relaxed">Add up to three links, then ingest. Each source is read with its own strategy.</p>
+    <div class="text-center mb-9">
+      <div class="font-mono-ibm text-xs tracking-[0.14em] uppercase text-[#E3A63C] mb-3">Step 1 of 1</div>
+      <h1 class="font-display text-[30px] font-semibold mb-3">Bring your sources.</h1>
+      <p class="text-[15px] text-[#A89C8C] max-w-[46ch] mx-auto leading-relaxed">Add an article, a discussion thread, and a video — Omnivex reads all three, then you can start asking questions.</p>
     </div>
 
-    <div class="px-8 flex flex-col gap-5">
+    <div class="flex flex-col gap-4 mb-7">
 
       <!-- Article -->
       <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] p-5" data-source="article">
@@ -108,11 +112,39 @@ body { background: #0C0B0A; }
 
     </div>
 
-    <div class="p-8 mt-auto">
-      <button id="ingest-btn" class="w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all disabled:opacity-40 disabled:pointer-events-none">
-        Ingest Sources
+    <button id="ingest-btn" class="w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all disabled:opacity-40 disabled:pointer-events-none">
+      Ingest Sources
+    </button>
+    <p class="font-mono-ibm text-[11px] text-[#6E645A] mt-4 text-center leading-relaxed">Sources are chunked and embedded locally — nothing leaves until you ask a question.</p>
+
+    <!-- Appears once ingestion finishes -->
+    <button id="enter-chat-btn" class="hidden fade-in w-full text-[15px] font-semibold border border-[#E3A63C] text-[#E3A63C] px-6 py-3.5 rounded-md mt-4 hover:bg-[#E3A63C]/[0.14] transition-colors">
+      Start chatting →
+    </button>
+
+  </div>
+</main>
+
+<!-- ============================= -->
+<!-- STAGE 2 — Chat                -->
+<!-- ============================= -->
+<main id="stage-chat" class="hidden flex-1 min-h-0 max-w-[1400px] w-full mx-auto grid grid-cols-[300px_1fr] md:grid-cols-1">
+
+  <!-- Sources panel (compact, read-only reference) -->
+  <aside class="border-r border-[#221F1B] md:border-r-0 md:border-b flex flex-col min-h-0 overflow-y-auto">
+    <div class="p-7 pb-5">
+      <h2 class="font-display text-[18px] font-semibold mb-1.5">Your sources</h2>
+      <p id="chat-session-chip" class="font-mono-ibm text-xs text-[#5E9C6E]">3 / 3 ready</p>
+    </div>
+
+    <div id="source-list" class="px-7 flex flex-col gap-3">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="p-7 mt-auto">
+      <button id="add-source-btn" class="w-full text-sm font-medium border border-[#332E28] rounded-md px-4 py-2.5 hover:border-[#E3A63C] hover:bg-[#E3A63C]/[0.14] transition-colors">
+        + Add another source
       </button>
-      <p class="font-mono-ibm text-[11px] text-[#6E645A] mt-4 leading-relaxed">Sources are chunked, embedded locally, and stored for this session — nothing leaves until you ask a question.</p>
     </div>
   </aside>
 
@@ -125,8 +157,8 @@ body { background: #0C0B0A; }
       <!-- Empty state -->
       <div id="empty-state" class="m-auto text-center max-w-[42ch]">
         <div class="font-mono-ibm text-xs tracking-[0.14em] uppercase text-[#E3A63C] mb-3">Ready when you are</div>
-        <h2 class="font-display text-[26px] font-semibold mb-3">Ingest your sources to start asking questions.</h2>
-        <p class="text-[15px] text-[#A89C8C] leading-relaxed">Once your links are ready, ask anything — Omnivex will retrieve, verify, and cite before it answers.</p>
+        <h2 class="font-display text-[26px] font-semibold mb-3">Ask anything about your sources.</h2>
+        <p class="text-[15px] text-[#A89C8C] leading-relaxed">Omnivex will retrieve, verify, and cite before it answers.</p>
       </div>
 
       <!-- User message (demo) -->
@@ -192,11 +224,11 @@ body { background: #0C0B0A; }
       <div class="max-w-[760px] mx-auto flex items-end gap-3 bg-[#1B1817] border border-[#2A2622] rounded-[14px] px-4 py-3.5 focus-within:border-[#E3A63C] transition-colors">
         <textarea id="chat-input" rows="1" placeholder="Ask something about your sources…"
           class="flex-1 bg-transparent resize-none text-sm placeholder:text-[#6E645A] focus:outline-none py-1 max-h-32"></textarea>
-        <button id="send-btn" class="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] flex items-center justify-center hover:-translate-y-0.5 transition-transform disabled:opacity-30 disabled:pointer-events-none" disabled>
+        <button id="send-btn" class="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] flex items-center justify-center hover:-translate-y-0.5 transition-transform disabled:opacity-30 disabled:pointer-events-none">
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
       </div>
-      <p id="composer-hint" class="font-mono-ibm text-[11px] text-[#6E645A] mt-3 text-center">Ingest at least one source to start asking questions.</p>
+      <p class="font-mono-ibm text-[11px] text-[#6E645A] mt-3 text-center">Answers are grounded only in what you've ingested — with citations for every claim.</p>
     </div>
 
   </section>
@@ -205,14 +237,23 @@ body { background: #0C0B0A; }
 <script>
   const sourceCards = document.querySelectorAll('[data-source]');
   const ingestBtn = document.getElementById('ingest-btn');
+  const enterChatBtn = document.getElementById('enter-chat-btn');
+  const stageSources = document.getElementById('stage-sources');
+  const stageChat = document.getElementById('stage-chat');
   const sessionChip = document.getElementById('session-chip');
+  const sourceList = document.getElementById('source-list');
   const chatInput = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-btn');
-  const composerHint = document.getElementById('composer-hint');
   const emptyState = document.getElementById('empty-state');
   const chatScroll = document.getElementById('chat-scroll');
   const userMsg = document.querySelector('.msg-user');
   const assistantMsg = document.querySelector('.msg-assistant');
+
+  const typeMeta = {
+    article: { label: 'Article / Wiki', badge: 'A', color: '#E3A63C' },
+    discussion: { label: 'Discussion Thread', badge: 'T', color: '#C1443A' },
+    video: { label: 'Video Transcript', badge: 'V', color: '#A89C8C' },
+  };
 
   function setStatus(card, state, label) {
     const dot = card.querySelector('.status-dot');
@@ -222,11 +263,7 @@ body { background: #0C0B0A; }
   }
 
   function readyCount() {
-    return document.querySelectorAll('.status-ready').length;
-  }
-
-  function refreshChip() {
-    sessionChip.textContent = readyCount() + ' / 3 sources ready';
+    return document.querySelectorAll('#stage-sources .status-ready').length;
   }
 
   ingestBtn.addEventListener('click', () => {
@@ -240,20 +277,51 @@ body { background: #0C0B0A; }
 
     setTimeout(() => {
       targets.forEach(card => setStatus(card, 'ready', 'Ready'));
-      refreshChip();
       ingestBtn.disabled = false;
       ingestBtn.textContent = 'Ingest Sources';
 
       if (readyCount() > 0) {
-        chatInput.disabled = false;
-        sendBtn.disabled = false;
-        composerHint.textContent = 'Answers are grounded only in what you\u2019ve ingested — with citations for every claim.';
+        enterChatBtn.classList.remove('hidden');
       }
     }, 1400);
   });
 
-  chatInput.addEventListener('input', () => {
-    sendBtn.disabled = chatInput.value.trim().length === 0 && readyCount() === 0;
+  enterChatBtn.addEventListener('click', () => {
+    // Build the read-only source list for the chat screen
+    sourceList.innerHTML = '';
+    document.querySelectorAll('#stage-sources [data-source]').forEach(card => {
+      const type = card.getAttribute('data-source');
+      const url = card.querySelector('input').value.trim();
+      const isReady = card.querySelector('.status-dot').classList.contains('status-ready');
+      if (!isReady) return;
+      const meta = typeMeta[type];
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-3 bg-[#1B1817] border border-[#2A2622] rounded-[12px] p-3.5';
+      row.innerHTML = `
+        <div class="w-7 h-7 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-[11px] font-semibold" style="background:${meta.color}24;color:${meta.color}">${meta.badge}</div>
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-[#F3EFE7] truncate">${meta.label}</div>
+          <div class="text-[11px] text-[#6E645A] truncate">${url || 'Ingested source'}</div>
+        </div>
+        <span class="ml-auto w-[7px] h-[7px] rounded-full status-ready shrink-0"></span>
+      `;
+      sourceList.appendChild(row);
+    });
+
+    const chatSessionChip = document.getElementById('chat-session-chip');
+    chatSessionChip.textContent = readyCount() + ' / 3 ready';
+
+    stageSources.classList.add('hidden');
+    stageChat.classList.remove('hidden');
+    stageChat.classList.add('fade-in');
+    sessionChip.classList.remove('hidden');
+    sessionChip.textContent = readyCount() + ' / 3 sources ready';
+  });
+
+  document.getElementById('add-source-btn').addEventListener('click', () => {
+    stageChat.classList.add('hidden');
+    stageSources.classList.remove('hidden');
+    stageSources.classList.add('fade-in');
   });
 
   function sendMessage() {
