@@ -32,27 +32,29 @@
       <p class="text-sm text-[#A89C8C]">Bring three sources, get one grounded answer.</p>
     </div>
 
-    <form class="bg-[#1B1817] border border-[#2A2622] rounded-[18px] p-7 flex flex-col gap-4" onsubmit="event.preventDefault(); window.location.href='app.html';">
+    <form id="signup-form" class="bg-[#1B1817] border border-[#2A2622] rounded-[18px] p-7 flex flex-col gap-4">
+
+      <div id="form-error" class="hidden text-sm text-[#C1443A] bg-[#C1443A]/[0.1] border border-[#C1443A]/30 rounded-md px-3.5 py-2.5"></div>
 
       <label class="block">
         <span class="text-xs font-medium text-[#A89C8C] mb-1.5 block">Full name</span>
-        <input type="text" required placeholder="Ada Lovelace"
+        <input id="name" type="text" required placeholder="Ada Lovelace"
           class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
       </label>
 
       <label class="block">
         <span class="text-xs font-medium text-[#A89C8C] mb-1.5 block">Email</span>
-        <input type="email" required placeholder="you@example.com"
+        <input id="email" type="email" required placeholder="you@example.com"
           class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
       </label>
 
       <label class="block">
         <span class="text-xs font-medium text-[#A89C8C] mb-1.5 block">Password</span>
-        <input type="password" required placeholder="At least 8 characters"
+        <input id="password" type="password" required minlength="8" placeholder="At least 8 characters"
           class="w-full bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors">
       </label>
 
-      <button type="submit" class="mt-2 w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all">
+      <button id="submit-btn" type="submit" class="mt-2 w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all disabled:opacity-50 disabled:pointer-events-none">
         Create account
       </button>
 
@@ -75,6 +77,8 @@
     </p>
   </div>
 </main>
+
+<script src="signup.js"></script>
 
 </body>
 </html>
