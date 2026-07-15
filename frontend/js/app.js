@@ -18,9 +18,9 @@
   const logoutBtn = document.getElementById('logout-btn');
 
   const typeMeta = {
-    article: { label: 'Article / Wiki', badge: 'A', color: '#E3A63C' },
-    discussion: { label: 'Discussion Thread', badge: 'T', color: '#C1443A' },
-    video: { label: 'Video Transcript', badge: 'V', color: '#A89C8C' },
+    article: { label: 'Article / Wiki', badge: 'A', color: '#E3A63C', icon: '▤' },
+    discussion: { label: 'Discussion Thread', badge: 'T', color: '#C1443A', icon: '✦' },
+    video: { label: 'Video Transcript', badge: 'V', color: '#A89C8C', icon: '▶' },
   };
 
   let currentSources = []; // mirrors what's actually saved on the server
@@ -180,24 +180,42 @@
     messageList.appendChild(el);
   }
 
+  // Turns a raw backend citation ({type, url, metadata, score}) into
+  // the icon + short label the UI shows as a pill.
+  function citationDisplay(c) {
+    const meta = typeMeta[c.type] || { icon: '●', label: 'Source' };
+    let label = meta.label;
+    if (c.type === 'video' && c.metadata?.startTime != null) {
+      const m = Math.floor(c.metadata.startTime / 60);
+      const s = String(c.metadata.startTime % 60).padStart(2, '0');
+      label = `${m}:${s}`;
+    } else if (c.type === 'discussion' && c.metadata?.commentId) {
+      label = `#${c.metadata.commentId}`;
+    } else if (c.type === 'article' && c.metadata?.paragraphIndex != null) {
+      label = `¶${c.metadata.paragraphIndex + 1}`;
+    }
+    return { icon: meta.icon, label };
+  }
+
   function renderAssistantMessage(msg) {
     const el = document.createElement('div');
     el.className = 'fade-in';
 
-    const citationsHtml = (msg.citations || []).map((c, i) =>
-      `<button class="citation-btn font-mono-ibm text-xs text-[#A89C8C] border border-[#332E28] hover:border-[#E3A63C] hover:text-[#E3A63C] px-3 py-1.5 rounded-full transition-colors" data-citation-index="${i}">${c.icon} ${c.label}</button>`
-    ).join('');
+    const citationsHtml = (msg.citations || []).map((c, i) => {
+      const { icon, label } = citationDisplay(c);
+      return `<button class="citation-btn font-mono-ibm text-xs text-[#A89C8C] border border-[#332E28] hover:border-[#E3A63C] hover:text-[#E3A63C] px-3 py-1.5 rounded-full transition-colors" data-citation-index="${i}">${icon} ${label}</button>`;
+    }).join('');
 
     const pct = Math.round((msg.confidence || 0) * 100);
 
-    const retries = (msg.healingLog || []).filter(h => h.verdict === 'REWRITE').length;
+    const retries = Math.max((msg.healingLog || []).length - 1, 0);
     const healingSummaryLabel = msg.healingLog && msg.healingLog.length
-      ? `↻ Healing log — ${retries} ${retries === 1 ? 'retry' : 'retries'}`
+      ? `↻ Healing log — ${retries === 0 ? 'no retries needed' : `${retries} ${retries === 1 ? 'retry' : 'retries'}`}`
       : '↻ Healing log';
 
     const healingRowsHtml = (msg.healingLog || []).map(h => {
       const color = h.verdict === 'SUPPORTED' ? '#5E9C6E' : h.verdict === 'WEAK' || h.verdict === 'UNSUPPORTED' ? '#C1443A' : '#E3A63C';
-      return `<div class="text-xs text-[#A89C8C] leading-relaxed"><span class="font-semibold" style="color:${color}">${h.verdict}.</span> ${h.note}</div>`;
+      return `<div class="text-xs text-[#A89C8C] leading-relaxed"><span class="font-semibold" style="color:${color}">Attempt ${h.attempt}: ${h.verdict}.</span> ${h.reason || ''}</div>`;
     }).join('');
 
     el.innerHTML = `
@@ -232,15 +250,11 @@
   }
 
   function openCitationModal(citation) {
-    const typeMap = {
-      '▶': { type: 'Video Transcript', body: 'This is where the exact transcript segment around this timestamp would show, once the ingestion pipeline is wired up.' },
-      '✦': { type: 'Discussion Thread', body: 'This is where the full comment (and its replies) would show, once the ingestion pipeline is wired up.' },
-      '▤': { type: 'Article / Wiki', body: 'This is where the source paragraph would show, once the ingestion pipeline is wired up.' },
-    };
-    const info = typeMap[citation.icon] || { type: 'Source', body: 'Source detail not available yet.' };
-    document.getElementById('citation-modal-type').textContent = info.type;
-    document.getElementById('citation-modal-title').textContent = citation.label;
-    document.getElementById('citation-modal-body').textContent = info.body;
+    const { icon, label } = citationDisplay(citation);
+    const typeLabel = { article: 'Article / Wiki', discussion: 'Discussion Thread', video: 'Video Transcript' }[citation.type] || 'Source';
+    document.getElementById('citation-modal-type').textContent = typeLabel;
+    document.getElementById('citation-modal-title').textContent = `${icon} ${label}`;
+    document.getElementById('citation-modal-body').textContent = citation.url || 'Source URL not available.';
     citationModal.classList.remove('hidden');
     citationModal.classList.add('flex');
   }
@@ -273,6 +287,35 @@
     document.getElementById('typing-indicator')?.remove();
   }
 
+  // ---------- streaming assistant bubble ----------
+  // A lightweight bubble that just grows text as tokens arrive. Once the
+  // stream's "done" event lands, it's swapped for the full rich bubble
+  // (citations, confidence bar, healing log) via renderAssistantMessage.
+
+  function beginStreamingMessage() {
+    const el = document.createElement('div');
+    el.className = 'fade-in';
+    el.innerHTML = `
+      <div class="bg-[#1B1817] border border-[#2A2622] rounded-[16px] rounded-tl-sm px-7 py-6">
+        <p class="text-[15px] leading-[1.75] text-[#F3EFE7]"></p>
+      </div>
+    `;
+    messageList.appendChild(el);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+    return { wrapper: el, textNode: el.querySelector('p') };
+  }
+
+  function finalizeStreamingMessage(stream, finalPayload) {
+    const text = stream.textNode.textContent;
+    stream.wrapper.remove();
+    renderAssistantMessage({
+      text,
+      citations: finalPayload?.citations || [],
+      confidence: finalPayload?.confidence || 0,
+      healingLog: finalPayload?.healingLog || [],
+    });
+  }
+
   async function loadChatHistory() {
     const { messages } = await api('/api/chat');
     messageList.innerHTML = '';
@@ -297,12 +340,47 @@
     showTypingIndicator();
 
     try {
-      const { assistantMessage } = await api('/api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       });
+      if (res.status === 401) { window.location.href = 'login.html'; return; }
+      if (!res.ok || !res.body) throw new Error('Request failed');
+
       hideTypingIndicator();
-      renderAssistantMessage(assistantMessage);
+      const stream = beginStreamingMessage();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalPayload = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split('\n\n');
+        buffer = events.pop(); // keep incomplete trailing chunk for next read
+        for (const evt of events) {
+          const eventMatch = evt.match(/^event: (\w+)/m);
+          const dataMatch = evt.match(/^data: (.+)$/m);
+          if (!eventMatch || !dataMatch) continue;
+          const payload = JSON.parse(dataMatch[1]);
+
+          if (eventMatch[1] === 'token') {
+            stream.textNode.textContent += payload.token;
+            chatScroll.scrollTop = chatScroll.scrollHeight;
+          } else if (eventMatch[1] === 'done') {
+            finalPayload = payload;
+          } else if (eventMatch[1] === 'error') {
+            stream.textNode.textContent = payload.error;
+          }
+        }
+      }
+
+      finalizeStreamingMessage(stream, finalPayload);
     } catch (err) {
       hideTypingIndicator();
       renderAssistantMessage({ text: `Something went wrong: ${err.message}`, citations: [], confidence: 0, healingLog: [] });
