@@ -1,0 +1,10 @@
+{
+  "name": "omnivex",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm run dev:all --prefix backend --silent",
+    "start": "npm start --prefix backend",
+    "install:backend": "npm install --prefix backend"
+  }
+}
