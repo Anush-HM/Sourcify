@@ -11,9 +11,9 @@ function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-async function retrieveTopChunks(userId, query, { k = 5, excludeTypes = [] } = {}) {
+async function retrieveTopChunks(sessionId, query, { k = 5, excludeTypes = [] } = {}) {
   const queryVec = await embedOne(query);
-  const filter = { userId };
+  const filter = { sessionId };
   if (excludeTypes.length) filter.type = { $nin: excludeTypes };
 
   const chunks = await Chunk.find(filter).lean();

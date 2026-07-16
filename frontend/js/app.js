@@ -4,6 +4,10 @@
   // refreshes, tabs, and devices as long as you're logged in.
 
   const sourceCards = document.querySelectorAll('[data-source]');
+  const defaultPlaceholders = {};
+  sourceCards.forEach(card => {
+    defaultPlaceholders[card.getAttribute('data-source')] = card.querySelector('input').placeholder;
+  });
   const ingestBtn = document.getElementById('ingest-btn');
   const enterChatBtn = document.getElementById('enter-chat-btn');
   const stageSources = document.getElementById('stage-sources');
@@ -16,6 +20,10 @@
   const chatScroll = document.getElementById('chat-scroll');
   const messageList = document.getElementById('message-list');
   const logoutBtn = document.getElementById('logout-btn');
+  const historyBtn = document.getElementById('history-btn');
+  const historyModal = document.getElementById('history-modal');
+  const sessionListEl = document.getElementById('session-list');
+  const newTopicBtn = document.getElementById('new-topic-btn');
 
   const typeMeta = {
     article: { label: 'Article / Wiki', badge: 'A', color: '#E3A63C', icon: '▤' },
@@ -56,6 +64,24 @@
     return document.querySelector(`#stage-sources [data-source="${type}"]`);
   }
 
+  // Marks a card as already having a saved source, without pre-filling
+  // the old URL into the input — it's already added, not something to
+  // resubmit. markIdle() restores the card's normal empty-slot state.
+  function markCardReady(card) {
+    const input = card.querySelector('input');
+    input.value = '';
+    input.placeholder = 'Already added — paste a new link to replace it';
+    setStatus(card, 'ready', 'Ready');
+  }
+
+  function markCardIdle(card) {
+    const input = card.querySelector('input');
+    const type = card.getAttribute('data-source');
+    input.value = '';
+    input.placeholder = defaultPlaceholders[type];
+    setStatus(card, 'idle', 'Idle');
+  }
+
   // ---------- avatar dropdown ----------
 
   avatarBtn.addEventListener('click', (e) => {
@@ -70,31 +96,116 @@
     const me = await api('/api/auth/me').catch(() => null);
     if (!me) return; // api() already redirected to login
     avatarBtn.textContent = (me.user.name || 'A').trim().charAt(0).toUpperCase();
+    historyBtn.classList.remove('hidden');
 
     const { sources } = await api('/api/sources');
     currentSources = sources;
 
-    // Reflect any already-ingested sources on the intake cards too,
-    // so re-visiting "add another source" shows accurate state.
+    // Mark any already-ingested sources as Ready, but leave the input
+    // itself empty — the old URL isn't something to re-type or re-submit,
+    // it's just already there. The placeholder makes that clear.
     sources.forEach(s => {
       const card = cardFor(s.type);
-      if (card) {
-        card.querySelector('input').value = s.url;
-        setStatus(card, 'ready', 'Ready');
-      }
+      if (card) markCardReady(card);
     });
 
-    if (sources.length > 0) {
-      await enterChat();
-    } else {
-      enterChatBtn.classList.toggle('hidden', sources.length === 0);
-    }
+    // Always land on the upload page after login — if sources already
+    // exist they're shown as "Ready" and the "Start chatting" button
+    // appears, but the user chooses when to actually enter chat.
+    enterChatBtn.classList.toggle('hidden', sources.length === 0);
   }
 
   logoutBtn.addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
     window.location.href = 'login.html';
   });
+
+  // ---------- topics / history ----------
+
+  historyBtn.addEventListener('click', openHistoryModal);
+  document.getElementById('history-modal-close').addEventListener('click', closeHistoryModal);
+  historyModal.addEventListener('click', (e) => { if (e.target === historyModal) closeHistoryModal(); });
+
+  function closeHistoryModal() {
+    historyModal.classList.add('hidden');
+    historyModal.classList.remove('flex');
+  }
+
+  async function openHistoryModal() {
+    historyModal.classList.remove('hidden');
+    historyModal.classList.add('flex');
+    sessionListEl.innerHTML = '<p class="text-xs text-[#6E645A]">Loading…</p>';
+    try {
+      const { sessions } = await api('/api/sessions');
+      if (sessions.length === 0) {
+        sessionListEl.innerHTML = '<p class="text-xs text-[#6E645A]">No previous topics yet.</p>';
+        return;
+      }
+      sessionListEl.innerHTML = '';
+      sessions.forEach(s => {
+        const row = document.createElement('button');
+        row.className = 'w-full text-left flex items-center justify-between gap-3 bg-[#16110C] border rounded-[12px] px-4 py-3 hover:border-[#E3A63C] transition-colors ' +
+          (s.isCurrent ? 'border-[#E3A63C]' : 'border-[#2A2622]');
+        row.innerHTML = `
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-[#F3EFE7] truncate">${s.title}${s.isCurrent ? ' (current)' : ''}</div>
+            <div class="text-[11px] text-[#6E645A]">${s.sourceCount} source${s.sourceCount === 1 ? '' : 's'} · ${new Date(s.updatedAt).toLocaleDateString()}</div>
+          </div>
+        `;
+        row.addEventListener('click', () => switchSession(s.id));
+        sessionListEl.appendChild(row);
+      });
+    } catch (err) {
+      sessionListEl.innerHTML = '<p class="text-xs text-[#C1443A]">Could not load topics.</p>';
+    }
+  }
+
+  async function switchSession(id) {
+    await api(`/api/sessions/${id}/activate`, { method: 'POST' });
+    closeHistoryModal();
+    await reloadCurrentSession();
+  }
+
+  const newConversationBtn = document.getElementById('new-conversation-btn');
+
+  async function startNewConversation() {
+    await api('/api/sessions', { method: 'POST' });
+    startFreshIntake();
+  }
+
+  newTopicBtn.addEventListener('click', async () => {
+    await startNewConversation();
+    closeHistoryModal();
+  });
+
+  newConversationBtn.addEventListener('click', startNewConversation);
+
+  async function reloadCurrentSession() {
+    const { sources } = await api('/api/sources');
+    currentSources = sources;
+    sourceCards.forEach(card => {
+      const type = card.getAttribute('data-source');
+      const match = sources.find(s => s.type === type);
+      match ? markCardReady(card) : markCardIdle(card);
+    });
+    if (sources.length > 0) {
+      await enterChat();
+    } else {
+      stageChat.classList.add('hidden');
+      stageSources.classList.remove('hidden');
+      enterChatBtn.classList.add('hidden');
+    }
+  }
+
+  function startFreshIntake() {
+    currentSources = [];
+    sourceCards.forEach(card => markCardIdle(card));
+    stageChat.classList.add('hidden');
+    stageSources.classList.remove('hidden');
+    stageSources.classList.add('fade-in');
+    enterChatBtn.classList.add('hidden');
+    messageList.innerHTML = '';
+  }
 
   // ---------- ingestion ----------
 
@@ -164,11 +275,9 @@
     await loadChatHistory();
   }
 
-  document.getElementById('add-source-btn').addEventListener('click', () => {
-    stageChat.classList.add('hidden');
-    stageSources.classList.remove('hidden');
-    stageSources.classList.add('fade-in');
-  });
+  // Adding sources now happens only via History → "Start new topic",
+  // which routes through startFreshIntake(). No in-chat add-source
+  // shortcut anymore.
 
   // ---------- chat ----------
 
@@ -180,7 +289,7 @@
     messageList.appendChild(el);
   }
 
-  // Turns a raw backend citation ({type, url, metadata, score}) into
+  // Turns a raw backend citation ({type, url, metadata, score, text}) into
   // the icon + short label the UI shows as a pill.
   function citationDisplay(c) {
     const meta = typeMeta[c.type] || { icon: '●', label: 'Source' };
@@ -195,6 +304,27 @@
       label = `¶${c.metadata.paragraphIndex + 1}`;
     }
     return { icon: meta.icon, label };
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Turns "[0]" / "[2, 4]" style markers the LLM writes into clickable
+  // buttons that open the matching citation, without ever trusting raw
+  // model output as HTML (text is escaped first).
+  function linkifyCitations(text, citations) {
+    const escaped = escapeHtml(text);
+    return escaped.replace(/\[(\d+(?:,\s*\d+)*)\]/g, (match, nums) => {
+      const indices = nums.split(',').map(n => n.trim());
+      const valid = indices.filter(i => citations && citations[Number(i)]);
+      if (valid.length === 0) return match;
+      return valid.map(i =>
+        `<button class="citation-inline-btn text-[#E3A63C] hover:underline font-medium" data-citation-index="${i}">[${i}]</button>`
+      ).join('');
+    });
   }
 
   function renderAssistantMessage(msg) {
@@ -241,7 +371,13 @@
         </details>` : ''}
       </div>
     `;
-    el.querySelector('p').textContent = msg.text;
+    el.querySelector('p').innerHTML = linkifyCitations(msg.text, msg.citations);
+    el.querySelectorAll('.citation-inline-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.getAttribute('data-citation-index'));
+        if (msg.citations && msg.citations[idx]) openCitationModal(msg.citations[idx]);
+      });
+    });
     messageList.appendChild(el);
 
     el.querySelectorAll('.citation-btn').forEach((btn, i) => {
@@ -249,12 +385,42 @@
     });
   }
 
+  // ---------- error message bubble ----------
+  // Distinct from a normal assistant answer: no confidence bar (a system
+  // failure isn't a grounding failure), red-tinted border, and a retry
+  // button that re-sends the same question without duplicating the
+  // user's message bubble.
+
+  function renderErrorMessage(errorText, originalUserText) {
+    const el = document.createElement('div');
+    el.className = 'fade-in';
+    el.innerHTML = `
+      <div class="bg-[#1B1817] border border-[#C1443A]/40 rounded-[16px] rounded-tl-sm px-7 py-6">
+        <div class="flex items-start gap-3 mb-4">
+          <span class="shrink-0 text-[#C1443A] text-lg leading-none mt-0.5">⚠</span>
+          <p class="text-[15px] leading-[1.75] text-[#F3EFE7]"></p>
+        </div>
+        <button class="retry-message-btn text-xs font-medium text-[#C1443A] border border-[#C1443A]/40 rounded-md px-3 py-1.5 hover:bg-[#C1443A]/[0.12] transition-colors">↻ Try again</button>
+      </div>
+    `;
+    el.querySelector('p').textContent = errorText || 'Something went wrong generating a response.';
+    el.querySelector('.retry-message-btn').addEventListener('click', () => {
+      el.remove();
+      performChatRequest(originalUserText);
+    });
+    messageList.appendChild(el);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+
   function openCitationModal(citation) {
     const { icon, label } = citationDisplay(citation);
     const typeLabel = { article: 'Article / Wiki', discussion: 'Discussion Thread', video: 'Video Transcript' }[citation.type] || 'Source';
     document.getElementById('citation-modal-type').textContent = typeLabel;
     document.getElementById('citation-modal-title').textContent = `${icon} ${label}`;
-    document.getElementById('citation-modal-body').textContent = citation.url || 'Source URL not available.';
+    document.getElementById('citation-modal-quote').textContent = citation.text || 'No excerpt available for this citation.';
+    const link = document.getElementById('citation-modal-body');
+    link.textContent = citation.url || 'Source URL not available.';
+    link.href = citation.url || '#';
     citationModal.classList.remove('hidden');
     citationModal.classList.add('flex');
   }
@@ -289,8 +455,9 @@
 
   // ---------- streaming assistant bubble ----------
   // A lightweight bubble that just grows text as tokens arrive. Once the
-  // stream's "done" event lands, it's swapped for the full rich bubble
-  // (citations, confidence bar, healing log) via renderAssistantMessage.
+  // stream ends, it's swapped for either the full rich bubble (citations,
+  // confidence bar, healing log) or an error bubble, depending on whether
+  // an 'error' event came through the stream.
 
   function beginStreamingMessage() {
     const el = document.createElement('div');
@@ -303,17 +470,6 @@
     messageList.appendChild(el);
     chatScroll.scrollTop = chatScroll.scrollHeight;
     return { wrapper: el, textNode: el.querySelector('p') };
-  }
-
-  function finalizeStreamingMessage(stream, finalPayload) {
-    const text = stream.textNode.textContent;
-    stream.wrapper.remove();
-    renderAssistantMessage({
-      text,
-      citations: finalPayload?.citations || [],
-      confidence: finalPayload?.confidence || 0,
-      healingLog: finalPayload?.healingLog || [],
-    });
   }
 
   async function loadChatHistory() {
@@ -333,10 +489,15 @@
     if (!text) return;
     emptyState.classList.add('hidden');
     chatInput.value = '';
-    sendBtn.disabled = true;
 
     renderUserMessage(text);
     chatScroll.scrollTop = chatScroll.scrollHeight;
+
+    await performChatRequest(text);
+  }
+
+  async function performChatRequest(text) {
+    sendBtn.disabled = true;
     showTypingIndicator();
 
     try {
@@ -355,6 +516,7 @@
       const decoder = new TextDecoder();
       let buffer = '';
       let finalPayload = null;
+      let streamError = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -375,15 +537,25 @@
           } else if (eventMatch[1] === 'done') {
             finalPayload = payload;
           } else if (eventMatch[1] === 'error') {
-            stream.textNode.textContent = payload.error;
+            streamError = payload.error;
           }
         }
       }
 
-      finalizeStreamingMessage(stream, finalPayload);
+      stream.wrapper.remove();
+      if (streamError) {
+        renderErrorMessage(streamError, text);
+      } else {
+        renderAssistantMessage({
+          text: stream.textNode.textContent,
+          citations: finalPayload?.citations || [],
+          confidence: finalPayload?.confidence || 0,
+          healingLog: finalPayload?.healingLog || [],
+        });
+      }
     } catch (err) {
       hideTypingIndicator();
-      renderAssistantMessage({ text: `Something went wrong: ${err.message}`, citations: [], confidence: 0, healingLog: [] });
+      renderErrorMessage("Couldn't reach the server — check your connection and try again.", text);
     }
     sendBtn.disabled = false;
     chatScroll.scrollTop = chatScroll.scrollHeight;

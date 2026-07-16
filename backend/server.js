@@ -7,15 +7,19 @@ const session = require('express-session');
 const MongoStore = require('connect-mongo');
 
 const connectDB = require('./db');
+const migrateLegacyData = require('./migrateLegacyData');
 const requireAuth = require('./middleware/requireAuth');
+const requireSession = require('./middleware/requireSession');
+const { chatLimiter, sourcesLimiter } = require('./middleware/rateLimit');
 const authRoutes = require('./routes/auth');
+const sessionsRoutes = require('./routes/sessions');
 const sourcesRoutes = require('./routes/sources');
 const chatRoutes = require('./routes/chat');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-connectDB();
+connectDB().then(migrateLegacyData);
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -28,20 +32,18 @@ app.use(
     store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
     cookie: {
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      maxAge: 1000 * 60 * 60 * 24 * 7,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     },
   })
 );
 
-// API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/sources', requireAuth, sourcesRoutes);
-app.use('/api/chat', requireAuth, chatRoutes);
+app.use('/api/sessions', requireAuth, sessionsRoutes);
+app.use('/api/sources', requireAuth, requireSession, sourcesLimiter, sourcesRoutes);
+app.use('/api/chat', requireAuth, requireSession, chatLimiter, chatRoutes);
 
-// Serve the existing frontend as static files, same-origin, so the
-// session cookie just works with no CORS headaches.
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 app.listen(PORT, () => {
