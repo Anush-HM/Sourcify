@@ -26,7 +26,7 @@ export function Header({ user, showAuthButtons = true }) {
                 to="/app"
                 className="bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-4 py-2 rounded-md hover:-translate-y-0.5 transition-all shadow-[0_4px_16px_rgba(227,166,60,0.15)] font-semibold"
               >
-                Go to app →
+                Open Workspace →
               </Link>
             ) : (
               <>

@@ -28,9 +28,8 @@ router.post('/', async (req, res) => {
 
     const sessionId = req.session.currentSessionId;
 
-    let source = await Source.findOne({ sessionId, type });
+    let source = await Source.findOne({ sessionId, url });
     if (source) {
-      source.url = url;
       source.status = 'processing';
       await source.save();
     } else {

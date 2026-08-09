@@ -18,8 +18,12 @@ export function AppPage({ user, onLogout }) {
   const [messages, setMessages] = useState([]);
   const [stage, setStage] = useState('sources'); // 'sources' | 'chat'
   
-  // Ingestion inputs
-  const [inputUrls, setInputUrls] = useState({ article: '', discussion: '', video: '' });
+  // Ingestion inputs: arrays of URLs per category for unlimited slots
+  const [inputUrls, setInputUrls] = useState({
+    article: [''],
+    discussion: [''],
+    video: [''],
+  });
   const [sourceStatuses, setSourceStatuses] = useState({
     article: { status: 'idle', label: 'Idle' },
     discussion: { status: 'idle', label: 'Idle' },
@@ -30,7 +34,7 @@ export function AppPage({ user, onLogout }) {
   const [prompt, setPrompt] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMsg, setStreamingMsg] = useState(null);
-  
+
   // Modals
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -74,20 +78,17 @@ export function AppPage({ user, onLogout }) {
       const fetchedSources = srcData.sources || [];
       setSources(fetchedSources);
 
-      // Populate input URLs and statuses from existing sources
       const newStatuses = {
         article: { status: 'idle', label: 'Idle' },
         discussion: { status: 'idle', label: 'Idle' },
         video: { status: 'idle', label: 'Idle' },
       };
-      const newUrls = { article: '', discussion: '', video: '' };
 
       fetchedSources.forEach((s) => {
-        newUrls[s.type] = s.url || '';
         if (s.status === 'ready') {
           newStatuses[s.type] = {
             status: 'ready',
-            label: `Ready (${s.chunkCount || 0} chunks)`,
+            label: `${fetchedSources.filter((f) => f.type === s.type).length} added`,
           };
         } else if (s.status === 'error') {
           newStatuses[s.type] = {
@@ -99,7 +100,6 @@ export function AppPage({ user, onLogout }) {
         }
       });
 
-      setInputUrls(newUrls);
       setSourceStatuses(newStatuses);
 
       // Auto-enter stage 2 if at least 1 source is ready
@@ -114,8 +114,30 @@ export function AppPage({ user, onLogout }) {
 
   const readySourcesCount = sources.filter((s) => s.status === 'ready').length;
 
-  const handleIngestSingle = async (type) => {
-    const url = inputUrls[type]?.trim();
+  const handleAddSlot = (type) => {
+    setInputUrls((prev) => ({
+      ...prev,
+      [type]: [...(prev[type] || ['']), ''],
+    }));
+  };
+
+  const handleRemoveSlot = (type, index) => {
+    setInputUrls((prev) => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleUrlChange = (type, index, value) => {
+    setInputUrls((prev) => {
+      const updated = [...(prev[type] || [''])];
+      updated[index] = value;
+      return { ...prev, [type]: updated };
+    });
+  };
+
+  const handleIngestSingleSlot = async (type, index) => {
+    const url = inputUrls[type]?.[index]?.trim();
     if (!url) return;
 
     setSourceStatuses((prev) => ({
@@ -125,6 +147,8 @@ export function AppPage({ user, onLogout }) {
 
     try {
       await api.ingestSource(type, url);
+      // Clear this slot
+      handleUrlChange(type, index, '');
       await loadSessionsAndSources();
     } catch (err) {
       setSourceStatuses((prev) => ({
@@ -134,30 +158,44 @@ export function AppPage({ user, onLogout }) {
     }
   };
 
-  const handleIngestAll = async () => {
-    const typesToIngest = ['article', 'discussion', 'video'].filter(
-      (type) => inputUrls[type]?.trim().length > 0
-    );
-    if (typesToIngest.length === 0) return;
+  const handleDeleteSource = async (sourceId) => {
+    try {
+      await api.deleteSource(sourceId);
+      await loadSessionsAndSources();
+    } catch (err) {
+      alert(`Could not remove source: ${err.message}`);
+    }
+  };
 
-    typesToIngest.forEach((type) => {
+  const handleIngestAll = async () => {
+    const entries = [];
+    ['article', 'discussion', 'video'].forEach((type) => {
+      (inputUrls[type] || []).forEach((url) => {
+        if (url.trim()) entries.push({ type, url: url.trim() });
+      });
+    });
+
+    if (entries.length === 0) return;
+
+    ['article', 'discussion', 'video'].forEach((type) => {
       setSourceStatuses((prev) => ({
         ...prev,
         [type]: { status: 'loading', label: 'Ingesting…' },
       }));
     });
 
-    for (const type of typesToIngest) {
+    for (const item of entries) {
       try {
-        await api.ingestSource(type, inputUrls[type].trim());
+        await api.ingestSource(item.type, item.url);
       } catch (err) {
         setSourceStatuses((prev) => ({
           ...prev,
-          [type]: { status: 'error', label: err.message || 'Ingestion failed' },
+          [item.type]: { status: 'error', label: err.message || 'Ingestion failed' },
         }));
       }
     }
 
+    setInputUrls({ article: [''], discussion: [''], video: [''] });
     await loadSessionsAndSources();
   };
 
@@ -310,7 +348,7 @@ export function AppPage({ user, onLogout }) {
               🕘 History
             </button>
             <div className="font-mono-ibm text-xs text-[#6E645A] border border-[#332E28] rounded-full px-3 py-1.5">
-              {readySourcesCount} / 3 sources ready
+              {readySourcesCount} {readySourcesCount === 1 ? 'source' : 'sources'} ready
             </div>
 
             <div className="relative">
@@ -361,6 +399,8 @@ export function AppPage({ user, onLogout }) {
               {['article', 'discussion', 'video'].map((type) => {
                 const meta = typeMeta[type];
                 const statusObj = sourceStatuses[type];
+                const typeSources = sources.filter((s) => s.type === type);
+                const slots = inputUrls[type] || [''];
                 const placeholders = {
                   article: 'Paste an article or Wikipedia link…',
                   discussion: 'Paste a Hacker News or Stack Exchange link…',
@@ -369,50 +409,110 @@ export function AppPage({ user, onLogout }) {
 
                 return (
                   <div key={type} className="bg-[#1B1817] border border-[#2A2622] rounded-[16px] p-5">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div
-                        className="w-9 h-9 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-xs font-semibold"
-                        style={{ backgroundColor: `${meta.color}24`, color: meta.color }}
-                      >
-                        {meta.badge}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-mono-ibm text-[11px] tracking-[0.1em] uppercase text-[#6E645A]">
-                          {meta.label}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-9 h-9 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-xs font-semibold"
+                          style={{ backgroundColor: `${meta.color}24`, color: meta.color }}
+                        >
+                          {meta.badge}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span
-                            className={`w-[7px] h-[7px] rounded-full shrink-0 ${
-                              statusObj.status === 'ready'
-                                ? 'bg-[#5E9C6E]'
-                                : statusObj.status === 'loading'
-                                ? 'bg-[#E3A63C] animate-pulse'
-                                : statusObj.status === 'error'
-                                ? 'bg-[#C1443A]'
-                                : 'bg-[#45403A]'
-                            }`}
-                          />
-                          <span className="text-xs text-[#A89C8C]">{statusObj.label}</span>
+                        <div className="min-w-0">
+                          <div className="font-mono-ibm text-[11px] tracking-[0.1em] uppercase text-[#6E645A]">
+                            {meta.label}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span
+                              className={`w-[7px] h-[7px] rounded-full shrink-0 ${
+                                statusObj.status === 'ready'
+                                  ? 'bg-[#5E9C6E]'
+                                  : statusObj.status === 'loading'
+                                  ? 'bg-[#E3A63C] animate-pulse'
+                                  : statusObj.status === 'error'
+                                  ? 'bg-[#C1443A]'
+                                  : 'bg-[#45403A]'
+                              }`}
+                            />
+                            <span className="text-xs text-[#A89C8C]">
+                              {typeSources.length > 0 ? `${typeSources.length} added` : statusObj.label}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        value={inputUrls[type]}
-                        onChange={(e) => setInputUrls({ ...inputUrls, [type]: e.target.value })}
-                        placeholder={placeholders[type]}
-                        className="flex-1 bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-3 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors text-[#F3EFE7]"
-                      />
                       <button
-                        onClick={() => handleIngestSingle(type)}
-                        disabled={statusObj.status === 'loading' || !inputUrls[type]?.trim()}
-                        className="text-xs font-semibold bg-[#2A2622] hover:bg-[#332E28] border border-[#3E3832] text-[#F3EFE7] px-4 py-3 rounded-md transition-colors disabled:opacity-40 cursor-pointer"
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleAddSlot(type);
+                        }}
+                        className="text-xs font-semibold text-[#E3A63C] hover:underline flex items-center gap-1 cursor-pointer bg-[#E3A63C]/10 border border-[#E3A63C]/30 px-2.5 py-1 rounded-md"
                       >
-                        Fetch
+                        + Add another link
                       </button>
                     </div>
+
+                    <div className="flex flex-col gap-2.5">
+                      {slots.map((urlVal, sIdx) => (
+                        <div key={sIdx} className="flex gap-2 items-center">
+                          <input
+                            type="url"
+                            value={urlVal}
+                            onChange={(e) => handleUrlChange(type, sIdx, e.target.value)}
+                            placeholder={placeholders[type]}
+                            className="flex-1 bg-[#16110C] border border-[#332E28] rounded-md px-3.5 py-2.5 text-sm placeholder:text-[#4E463D] focus:outline-none focus:border-[#E3A63C] transition-colors text-[#F3EFE7]"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleIngestSingleSlot(type, sIdx);
+                            }}
+                            disabled={statusObj.status === 'loading' || !urlVal.trim()}
+                            className="text-xs font-semibold bg-[#2A2622] hover:bg-[#332E28] border border-[#3E3832] text-[#F3EFE7] px-3.5 py-2.5 rounded-md transition-colors disabled:opacity-40 cursor-pointer shrink-0"
+                          >
+                            Fetch
+                          </button>
+                          {slots.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleRemoveSlot(type, sIdx);
+                              }}
+                              className="text-[#A89C8C] hover:text-[#C1443A] p-2 rounded hover:bg-[#2A2622] transition-colors cursor-pointer text-xs"
+                              title="Remove input slot"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {typeSources.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-[#2A2622] flex flex-col gap-1.5">
+                        {typeSources.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex items-center justify-between text-xs text-[#A89C8C] bg-[#16110C] px-3 py-2 rounded border border-[#2A2622]"
+                          >
+                            <span className="truncate max-w-[420px] font-mono-ibm text-[#F3EFE7]/90">{s.url}</span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="text-[#5E9C6E] font-medium">✓ Ready</span>
+                              <button
+                                onClick={() => handleDeleteSource(s.id)}
+                                className="text-[#A89C8C] hover:text-[#C1443A] transition-colors cursor-pointer text-xs"
+                                title="Remove source"
+                              >
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -422,7 +522,7 @@ export function AppPage({ user, onLogout }) {
               onClick={handleIngestAll}
               className="w-full text-[15px] font-semibold bg-gradient-to-br from-[#E3A63C] to-[#C1443A] text-[#16110C] px-6 py-3.5 rounded-md hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(227,166,60,0.18)] transition-all cursor-pointer"
             >
-              Ingest Sources
+              Ingest All New Sources
             </button>
 
             <p className="font-mono-ibm text-[11px] text-[#6E645A] mt-4 text-center leading-relaxed">
@@ -446,33 +546,53 @@ export function AppPage({ user, onLogout }) {
         <main className="flex-1 min-h-0 max-w-[1400px] w-full mx-auto grid grid-cols-[280px_1fr]">
           {/* Sidebar */}
           <aside className="border-r border-[#221F1B] flex flex-col min-h-0 overflow-y-auto bg-[#0F0E0D]">
-            <div className="p-6 pb-4">
-              <h2 className="font-display text-[18px] font-semibold mb-1.5">Your sources</h2>
-              <p className="font-mono-ibm text-xs text-[#5E9C6E]">{readySourcesCount} / 3 ready</p>
+            <div className="p-6 pb-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-[18px] font-semibold mb-0.5">Your sources</h2>
+                <p className="font-mono-ibm text-xs text-[#5E9C6E]">
+                  {readySourcesCount} {readySourcesCount === 1 ? 'source' : 'sources'} ready
+                </p>
+              </div>
+              <button
+                onClick={() => setStage('sources')}
+                className="text-xs font-semibold text-[#E3A63C] hover:underline bg-[#E3A63C]/10 border border-[#E3A63C]/30 px-2 py-1 rounded cursor-pointer"
+              >
+                + Add
+              </button>
             </div>
 
             <div className="px-6 flex flex-col gap-3">
-              {['article', 'discussion', 'video'].map((type) => {
-                const s = sources.find((src) => src.type === type);
-                const meta = typeMeta[type];
-                return (
-                  <div
-                    key={type}
-                    className="bg-[#16110C] border border-[#2A2622] rounded-[12px] p-3 flex items-center gap-3"
-                  >
+              {sources.length === 0 ? (
+                <div className="text-xs text-[#6E645A] font-mono-ibm">No sources added yet</div>
+              ) : (
+                sources.map((s, sIdx) => {
+                  const meta = typeMeta[s.type] || typeMeta.article;
+                  return (
                     <div
-                      className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-[11px] font-semibold"
-                      style={{ backgroundColor: `${meta.color}24`, color: meta.color }}
+                      key={s.id || sIdx}
+                      className="bg-[#16110C] border border-[#2A2622] rounded-[12px] p-3 flex items-center gap-2.5"
                     >
-                      {meta.badge}
+                      <div
+                        className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center font-mono-ibm text-[11px] font-semibold"
+                        style={{ backgroundColor: `${meta.color}24`, color: meta.color }}
+                      >
+                        {meta.badge}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-medium text-[#F3EFE7] truncate">{meta.label}</div>
+                        <div className="text-[11px] text-[#6E645A] truncate">{s.url}</div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteSource(s.id)}
+                        className="text-[#6E645A] hover:text-[#C1443A] transition-colors cursor-pointer text-xs p-1"
+                        title="Delete source"
+                      >
+                        🗑
+                      </button>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-[#F3EFE7] truncate">{meta.label}</div>
-                      <div className="text-[11px] text-[#6E645A] truncate">{s?.url || 'Not added'}</div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             <div className="px-6 mt-6 pt-6 border-t border-[#221F1B] flex flex-col gap-2">
