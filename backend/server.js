@@ -15,9 +15,15 @@ const authRoutes = require('./routes/auth');
 const sessionsRoutes = require('./routes/sessions');
 const sourcesRoutes = require('./routes/sources');
 const chatRoutes = require('./routes/chat');
+const reportRoutes = require('./routes/report');
+const contradictionsRoutes = require('./routes/contradictions');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 connectDB().then(migrateLegacyData);
 
@@ -43,9 +49,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/sessions', requireAuth, sessionsRoutes);
 app.use('/api/sources', requireAuth, requireSession, sourcesLimiter, sourcesRoutes);
 app.use('/api/chat', requireAuth, requireSession, chatLimiter, chatRoutes);
+app.use('/api/report', requireAuth, requireSession, chatLimiter, reportRoutes);
+app.use('/api/contradictions', requireAuth, requireSession, chatLimiter, contradictionsRoutes);
 
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 app.listen(PORT, () => {
-  console.log(`Omnivex backend running on http://localhost:${PORT}`);
+  console.log(`Sourcify backend running on http://localhost:${PORT}`);
 });

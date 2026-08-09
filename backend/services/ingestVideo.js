@@ -39,8 +39,24 @@ async function extractVideo(url) {
   return chunks;
 }
 
+function cleanTranscriptText(rawText) {
+  if (!rawText) return '';
+  return rawText
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#[0-9]+;/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\uFFFD\u00FE\u00FF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function flush(buffer, windowStart) {
-  const text = buffer.map((s) => s.text).join(' ').replace(/\s+/g, ' ').trim();
+  const rawJoined = buffer.map((s) => s.text).join(' ');
+  const text = cleanTranscriptText(rawJoined);
   const lastSeg = buffer[buffer.length - 1];
   const endSec = lastSeg.offset / 1000 + lastSeg.duration / 1000;
   return { text, metadata: { startTime: Math.round(windowStart), endTime: Math.round(endSec) } };

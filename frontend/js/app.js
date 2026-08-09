@@ -35,6 +35,12 @@
   const avatarBtn = document.getElementById('avatar-btn');
   const avatarMenu = document.getElementById('avatar-menu');
   const citationModal = document.getElementById('citation-modal');
+  const reportBtn = document.getElementById('report-btn');
+  const reportModal = document.getElementById('report-modal');
+  const contradictionsBtn = document.getElementById('contradictions-btn');
+  const contradictionsModal = document.getElementById('contradictions-modal');
+  const reportDownloadBtn = document.getElementById('report-download-btn');
+  let lastReportData = null;
 
   async function api(path, options = {}) {
     const res = await fetch(path, {
@@ -431,6 +437,246 @@
     citationModal.classList.add('hidden');
     citationModal.classList.remove('flex');
   }
+
+  // ---------- generate report ----------
+  // Reuses linkifyCitations()/openCitationModal() from the chat pipeline —
+  // the backend numbers report citations the same way chat answers do,
+  // so "[0]" markers in the report text become the same clickable pills.
+
+  function loadingDots() {
+    return `
+      <div class="flex items-center gap-1.5 py-8 justify-center">
+        <span class="typing-dot w-1.5 h-1.5 rounded-full bg-[#A89C8C]"></span>
+        <span class="typing-dot w-1.5 h-1.5 rounded-full bg-[#A89C8C]"></span>
+        <span class="typing-dot w-1.5 h-1.5 rounded-full bg-[#A89C8C]"></span>
+      </div>`;
+  }
+
+  function renderReportBody(reportText, citations) {
+    const lines = reportText.split('\n').filter(l => l.trim().length > 0);
+    return lines.map(line => {
+      if (line.startsWith('## ')) {
+        return `<h4 class="font-display text-[16px] font-semibold text-[#E3A63C] mt-5 mb-2 first:mt-0">${escapeHtml(line.slice(3).trim())}</h4>`;
+      }
+      return `<p class="text-sm leading-relaxed text-[#F3EFE7] mb-2">${linkifyCitations(line, citations)}</p>`;
+    }).join('');
+  }
+
+  async function openReportModal() {
+    reportModal.classList.remove('hidden');
+    reportModal.classList.add('flex');
+    reportDownloadBtn.classList.add('hidden');
+    lastReportData = null;
+    const body = document.getElementById('report-modal-body');
+    body.innerHTML = loadingDots();
+    try {
+      const data = await api('/api/report', { method: 'POST' });
+      lastReportData = data;
+      body.innerHTML = renderReportBody(data.reportText, data.citations || []);
+      body.querySelectorAll('.citation-inline-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.getAttribute('data-citation-index'));
+          if (data.citations && data.citations[idx]) openCitationModal(data.citations[idx]);
+        });
+      });
+      reportDownloadBtn.classList.remove('hidden');
+    } catch (err) {
+      body.innerHTML = `<p class="text-sm text-[#C1443A]">${escapeHtml(err.message || 'Could not generate report.')}</p>`;
+    }
+  }
+
+  function closeReportModal() {
+    reportModal.classList.add('hidden');
+    reportModal.classList.remove('flex');
+  }
+
+  // Builds a formatted PDF from the last generated report — headings,
+  // body text (word-wrapped, paginated), and a "Sources cited" appendix
+  // with each citation's label, excerpt, and URL. Runs entirely in the
+  // browser via jsPDF; no backend call needed since we already have the
+  // report data from openReportModal().
+  function downloadReportPdf() {
+    if (!lastReportData) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    const maxWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    function ensureSpace(lineHeight) {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    }
+
+    function cleanPDFText(text) {
+      if (!text) return '';
+      return text
+        .replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\uFFFD\u00FE\u00FF]/g, '')
+        .replace(/[^\x20-\x7E\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(20, 20, 20);
+    doc.text('Sourcify Report', margin, y);
+    y += 24;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(110, 100, 90);
+    const generated = lastReportData.generatedAt ? new Date(lastReportData.generatedAt).toLocaleString() : '';
+    doc.text(`Generated ${generated}`, margin, y);
+    y += 14;
+    const counts = lastReportData.sourceCounts || {};
+    doc.text(`Sources — article: ${counts.article || 0}, discussion: ${counts.discussion || 0}, video: ${counts.video || 0}`, margin, y);
+    y += 26;
+
+    doc.setTextColor(20, 20, 20);
+    const lines = (lastReportData.reportText || '').split('\n').filter(l => l.trim().length > 0);
+    lines.forEach(line => {
+      const cleanLine = cleanPDFText(line);
+      if (line.startsWith('## ')) {
+        y += 8;
+        ensureSpace(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text(cleanLine, margin, y);
+        y += 18;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+      } else if (cleanLine) {
+        const wrapped = doc.splitTextToSize(cleanLine, maxWidth);
+        wrapped.forEach(w => {
+          ensureSpace(15);
+          doc.text(w, margin, y);
+          y += 15;
+        });
+        y += 4;
+      }
+    });
+
+    const citations = lastReportData.citations || [];
+    if (citations.length) {
+      y += 12;
+      ensureSpace(20);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(20, 20, 20);
+      doc.text('Sources cited', margin, y);
+      y += 18;
+
+      citations.forEach((c, i) => {
+        const { label } = citationDisplay(c);
+        ensureSpace(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(180, 90, 30);
+        doc.text(`[${i}] ${cleanPDFText(label)}`, margin, y);
+        y += 12;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(60, 60, 60);
+        const excerpt = cleanPDFText((c.text || '').slice(0, 220));
+        doc.splitTextToSize(excerpt, maxWidth).forEach(w => {
+          ensureSpace(11);
+          doc.text(w, margin, y);
+          y += 11;
+        });
+
+        if (c.url) {
+          doc.setTextColor(120, 120, 120);
+          doc.splitTextToSize(c.url, maxWidth).forEach(w => {
+            ensureSpace(11);
+            doc.text(w, margin, y);
+            y += 11;
+          });
+        }
+        y += 8;
+        doc.setTextColor(20, 20, 20);
+      });
+    }
+
+    doc.save(`sourcify-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+  }
+
+  reportBtn.addEventListener('click', openReportModal);
+  document.getElementById('report-modal-close').addEventListener('click', closeReportModal);
+  reportModal.addEventListener('click', (e) => { if (e.target === reportModal) closeReportModal(); });
+  reportDownloadBtn.addEventListener('click', downloadReportPdf);
+
+  // ---------- check contradictions ----------
+
+  function truncate(text, n) {
+    if (!text) return '';
+    return text.length > n ? text.slice(0, n) + '…' : text;
+  }
+
+  function renderContradictionCard(c, i) {
+    const a = citationDisplay(c.citationA);
+    const b = citationDisplay(c.citationB);
+    return `
+      <div class="bg-[#16110C] border border-[#2A2622] rounded-[14px] p-5 ${i > 0 ? 'mt-4' : ''}">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[#C1443A]">⚠</span>
+          <h4 class="text-sm font-semibold text-[#F3EFE7]">${escapeHtml(c.topic)}</h4>
+        </div>
+        <p class="text-xs text-[#A89C8C] leading-relaxed mb-4">${escapeHtml(c.explanation)}</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button class="contradiction-citation-btn text-left bg-[#1B1817] border border-[#2A2622] hover:border-[#E3A63C] rounded-md p-3 transition-colors" data-cindex="${i}" data-side="a">
+            <div class="font-mono-ibm text-[10px] uppercase tracking-[0.08em] text-[#6E645A] mb-1">${a.icon} ${a.label}</div>
+            <div class="text-xs text-[#F3EFE7]">${escapeHtml(truncate(c.citationA.text, 140))}</div>
+          </button>
+          <button class="contradiction-citation-btn text-left bg-[#1B1817] border border-[#2A2622] hover:border-[#E3A63C] rounded-md p-3 transition-colors" data-cindex="${i}" data-side="b">
+            <div class="font-mono-ibm text-[10px] uppercase tracking-[0.08em] text-[#6E645A] mb-1">${b.icon} ${b.label}</div>
+            <div class="text-xs text-[#F3EFE7]">${escapeHtml(truncate(c.citationB.text, 140))}</div>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function openContradictionsModal() {
+    contradictionsModal.classList.remove('hidden');
+    contradictionsModal.classList.add('flex');
+    const body = document.getElementById('contradictions-modal-body');
+    body.innerHTML = loadingDots();
+    try {
+      const data = await api('/api/contradictions', { method: 'POST' });
+      if (data.insufficientSources) {
+        body.innerHTML = `<p class="text-sm text-[#A89C8C]">${escapeHtml(data.message)}</p>`;
+        return;
+      }
+      if (!data.hasContradictions) {
+        body.innerHTML = `<p class="text-sm text-[#5E9C6E]">✓ No contradictions found across your sources.</p>`;
+        return;
+      }
+      body.innerHTML = data.contradictions.map((c, i) => renderContradictionCard(c, i)).join('');
+      body.querySelectorAll('.contradiction-citation-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const ci = Number(btn.getAttribute('data-cindex'));
+          const side = btn.getAttribute('data-side');
+          openCitationModal(data.contradictions[ci][side === 'a' ? 'citationA' : 'citationB']);
+        });
+      });
+    } catch (err) {
+      body.innerHTML = `<p class="text-sm text-[#C1443A]">${escapeHtml(err.message || 'Could not check for contradictions.')}</p>`;
+    }
+  }
+
+  function closeContradictionsModal() {
+    contradictionsModal.classList.add('hidden');
+    contradictionsModal.classList.remove('flex');
+  }
+
+  contradictionsBtn.addEventListener('click', openContradictionsModal);
+  document.getElementById('contradictions-modal-close').addEventListener('click', closeContradictionsModal);
+  contradictionsModal.addEventListener('click', (e) => { if (e.target === contradictionsModal) closeContradictionsModal(); });
 
   // ---------- typing indicator ----------
 

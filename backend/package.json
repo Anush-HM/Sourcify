@@ -1,7 +1,7 @@
 {
-  "name": "omnivex-backend",
+  "name": "sourcify-backend",
   "version": "1.0.0",
-  "description": "Omnivex - Multi-source Self-Healing RAG Platform (Backend)",
+  "description": "Sourcify - Multi-source Self-Healing RAG Platform (Backend)",
   "main": "server.js",
   "type": "commonjs",
   "private": true,
