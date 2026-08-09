@@ -74,8 +74,12 @@ async function extractStackExchange(url) {
   return chunks;
 }
 
+const decodeHtmlEntities = require('../utils/decodeHtmlEntities');
+
 function stripHtml(html) {
-  return html.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (!html) return '';
+  const noTags = html.replace(/<[^>]+>/g, ' ');
+  return decodeHtmlEntities(noTags);
 }
 
 async function extractDiscussion(url) {

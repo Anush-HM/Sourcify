@@ -3,8 +3,11 @@ const cheerio = require('cheerio');
 const MIN_PARAGRAPH_LENGTH = 40; // skip nav/junk fragments
 const MAX_CHUNK_CHARS = 1200;    // merge short paragraphs, cap long ones
 
+const decodeHtmlEntities = require('../utils/decodeHtmlEntities');
+
 function cleanText(text) {
-  return text.replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return decodeHtmlEntities(text.replace(/\s+/g, ' ').trim());
 }
 
 async function fetchHtml(url) {

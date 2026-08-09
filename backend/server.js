@@ -52,7 +52,15 @@ app.use('/api/chat', requireAuth, requireSession, chatLimiter, chatRoutes);
 app.use('/api/report', requireAuth, requireSession, chatLimiter, reportRoutes);
 app.use('/api/contradictions', requireAuth, requireSession, chatLimiter, contradictionsRoutes);
 
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+const distPath = path.join(__dirname, '..', 'frontend', 'dist');
+const staticPath = require('fs').existsSync(distPath) ? distPath : path.join(__dirname, '..', 'frontend');
+app.use(express.static(staticPath));
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  const indexPath = path.join(staticPath, 'index.html');
+  res.sendFile(indexPath);
+});
 
 app.listen(PORT, () => {
   console.log(`Sourcify backend running on http://localhost:${PORT}`);
