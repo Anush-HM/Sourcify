@@ -27,20 +27,46 @@ if (process.env.NODE_ENV === 'production') {
 
 connectDB().then(migrateLegacyData);
 
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((url) => url.trim())
+  : [
+      'https://sourcify-red.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
+    ];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins === true ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        process.env.NODE_ENV !== 'production'
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
+
+const isProd = process.env.NODE_ENV === 'production';
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'sourcify_secret_key',
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
     cookie: {
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
     },
   })
 );
