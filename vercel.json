@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://sourcify-backend.onrender.com/api/:path*"
+      "destination": "https://sourcify-mgde.onrender.com/api/:path*"
     },
     {
       "source": "/((?!api/).*)",
