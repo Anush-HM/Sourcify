@@ -1,13 +1,6 @@
 // API service helper connecting React frontend to Express backend endpoints
 
-const getApiBase = () => {
-  let base = (import.meta.env.VITE_API_BASE_URL || 'https://sourcify-mgde.onrender.com/api').trim().replace(/\/$/, '');
-  if (base.startsWith('http') && !base.endsWith('/api')) {
-    base += '/api';
-  }
-  return base;
-};
-const API_BASE = getApiBase();
+const API_BASE = '/api';
 
 async function request(path, options = {}) {
   const config = {
